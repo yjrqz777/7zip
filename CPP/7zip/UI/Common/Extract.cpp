@@ -2,6 +2,10 @@
 
 #include "StdAfx.h"
 
+#ifndef _WIN32
+#include <errno.h>
+#endif
+
 #include "../../../Common/StringConvert.h"
 
 #include "../../../Windows/FileDir.h"
@@ -33,6 +37,101 @@ static void SetErrorMessage(const char *message,
 }
 
 
+// Classify the paths that will actually be extracted, including implicit folders.
+class CSmartExtractRoot
+{
+  UString _name;
+  bool _defined;
+  bool _isDir;
+  bool _singleRoot;
+  unsigned _numRootFiles;
+
+public:
+  CSmartExtractRoot():
+      _defined(false),
+      _isDir(false),
+      _singleRoot(true),
+      _numRootFiles(0)
+      {}
+
+  void Add(const CReadArcItem &item)
+  {
+    UStringVector parts = item.PathParts;
+    Correct_FsPath(false, false, parts, item.MainIsDir);
+    if (parts.IsEmpty())
+      return;
+
+    const bool isDir = parts.Size() > 1 || item.MainIsDir;
+    if (!_defined)
+    {
+      _name = parts[0];
+      _isDir = isDir;
+      _defined = true;
+    }
+    else if (CompareFileNames(_name, parts[0]) != 0 || _isDir != isDir)
+      _singleRoot = false;
+
+    if (!isDir)
+    {
+      #ifdef SUPPORT_ALT_STREAMS
+      if (!item.IsAltStream)
+      #endif
+        if (_numRootFiles < 2)
+          _numRootFiles++;
+    }
+  }
+
+  bool NeedsFolder() const { return !_singleRoot || _numRootFiles > 1; }
+};
+
+
+// Reserve a new directory, so concurrent extractions cannot merge their output.
+static HRESULT CreateSmartExtractDir(FString &outDir, const FString &arcName,
+    UString &errorMessage)
+{
+  if (outDir.IsEmpty())
+    outDir = "." STRING_PATH_SEPARATOR;
+  if (!CreateComplexDir(outDir))
+  {
+    const HRESULT res = GetLastError_noZero_HRESULT();
+    SetErrorMessage("Cannot create output directory", outDir, res, errorMessage);
+    return res;
+  }
+
+  NName::NormalizeDirPathPrefix(outDir);
+  const FString basePath = outDir + arcName;
+  for (UInt32 number = 1;; number++)
+  {
+    FString path = basePath;
+    if (number != 1)
+    {
+      path += " (";
+      path.Add_UInt32(number);
+      path += ")";
+    }
+    if (CreateDir(path))
+    {
+      outDir = path;
+      NName::NormalizeDirPathPrefix(outDir);
+      return S_OK;
+    }
+
+    const HRESULT res = GetLastError_noZero_HRESULT();
+    #ifdef _WIN32
+    const bool alreadyExists = (res == HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)
+        || res == HRESULT_FROM_WIN32(ERROR_FILE_EXISTS));
+    #else
+    const bool alreadyExists = (errno == EEXIST);
+    #endif
+    if (!alreadyExists || number == (UInt32)(Int32)-1)
+    {
+      SetErrorMessage("Cannot create output directory", path, res, errorMessage);
+      return res;
+    }
+  }
+}
+
+
 static HRESULT DecompressArchive(
     CCodecs *codecs,
     const CArchiveLink &arcLink,
@@ -53,8 +152,15 @@ static HRESULT DecompressArchive(
   
   UStringVector removePathParts;
 
+  const bool smartExtract = options.OutDirMode == NExtractOutDirMode::k_Smart
+      && !options.StdInMode && !options.StdOutMode && !options.TestMode
+      && (options.PathMode == NExtract::NPathMode::kFullPaths
+          || options.PathMode == NExtract::NPathMode::kCurPaths);
+  CSmartExtractRoot smartRoot;
+  FString smartArcName;
   FString outDir = options.OutputDir;
-  if (options.OutDirMode != NExtractOutDirMode::k_Direct)
+  if (options.OutDirMode != NExtractOutDirMode::k_Direct
+      && (options.OutDirMode != NExtractOutDirMode::k_Smart || smartExtract))
   {
     UString replaceName = arc.DefaultName;
     if (arcLink.Arcs.Size() > 1)
@@ -67,7 +173,9 @@ static HRESULT DecompressArchive(
         replaceName = arc0.DefaultName;
     }
     const FString correctedName = us2fs(Get_Correct_FsFile_Name(replaceName));
-    if (options.OutDirMode == NExtractOutDirMode::k_AddArcName)
+    if (smartExtract)
+      smartArcName = correctedName;
+    else if (options.OutDirMode == NExtractOutDirMode::k_AddArcName)
     {
       outDir += correctedName;
       NFile::NName::NormalizeDirPathPrefix(outDir);
@@ -80,7 +188,8 @@ static HRESULT DecompressArchive(
   UString elimPrefix; // only pure name without dir delimiter
   FString outDirReduced = outDir;
   
-  if (options.ElimDup.Val && options.PathMode != NExtract::NPathMode::kAbsPaths)
+  if (options.ElimDup.Val && options.OutDirMode != NExtractOutDirMode::k_Smart
+      && options.PathMode != NExtract::NPathMode::kAbsPaths)
   {
     UString dirPrefix;
     SplitPathToParts_Smart(fs2us(outDir), dirPrefix, elimPrefix);
@@ -107,7 +216,8 @@ static HRESULT DecompressArchive(
 
     for (UInt32 i = 0; i < numItems; i++)
     {
-      if (elimIsPossible
+      if (smartExtract
+          || elimIsPossible
           || !allFilesAreAllowed
           || options.ExcludeDirItems
           || options.ExcludeFileItems)
@@ -171,6 +281,9 @@ static HRESULT DecompressArchive(
       }
 #endif
 
+      if (smartExtract)
+        smartRoot.Add(item);
+
       realIndices.Add(i);
     }
     
@@ -179,6 +292,11 @@ static HRESULT DecompressArchive(
       callback->ThereAreNoFiles();
       return callback->ExtractResult(S_OK);
     }
+  }
+
+  if (smartExtract && smartRoot.NeedsFolder())
+  {
+    RINOK(CreateSmartExtractDir(outDir, smartArcName, errorMessage))
   }
 
   if (elimIsPossible)

@@ -40,6 +40,8 @@ inline void AddLangString(UString &s, UInt32 langID) { s += NWindows::MyLoadStri
 
 #endif
 
+UString LangString_SmartExtract();
+
 FString GetLangDirPrefix();
 // bool LangOpen(CLang &lang, CFSTR fileName);
 

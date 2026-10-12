@@ -97,7 +97,8 @@ public:
     kHash_BLAKE2SP,
     kHash_All,
     kHash_Generate_SHA256,
-    kHash_TestArc
+    kHash_TestArc,
+    kExtractHereSmart
   };
 
 public:

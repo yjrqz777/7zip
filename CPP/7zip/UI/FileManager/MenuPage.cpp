@@ -52,6 +52,7 @@ static const CContextMenuItem kMenuItems[] =
   { IDS_CONTEXT_OPEN, kOpenAs },
   { IDS_CONTEXT_EXTRACT, kExtract },
   { IDS_CONTEXT_EXTRACT_HERE, kExtractHere },
+  { IDS_CONTEXT_EXTRACT_HERE_SMART, kExtractHereSmart },
   { IDS_CONTEXT_EXTRACT_TO, kExtractTo },
 
   { IDS_CONTEXT_TEST, kTest },
@@ -238,7 +239,9 @@ bool CMenuPage::OnInit()
   {
     const CContextMenuItem &menuItem = kMenuItems[i];
 
-    UString s = LangString(menuItem.ControlID);
+    UString s = menuItem.Flag == kExtractHereSmart
+        ? LangString_SmartExtract()
+        : LangString(menuItem.ControlID);
     if (menuItem.Flag == kCRC)
       s = "CRC SHA";
     else if (menuItem.Flag == kCRC_Cascaded)

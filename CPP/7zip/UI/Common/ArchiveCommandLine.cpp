@@ -341,7 +341,7 @@ static const CSwitchForm kSwitchForms[] =
   { "spd", SWFRM_SIMPLE },
   { "spe", SWFRM_MINUS },
   { "spf", SWFRM_STRING_SINGL(0) },
-  { "spo", NSwitchType::kChar, false, 1, "dcr" }, // kOutDirMode
+  { "spo", NSwitchType::kChar, false, 1, "dcrs" }, // kOutDirMode
 
   { "snh", SWFRM_MINUS },
   { "snld", SWFRM_STRING },
@@ -1739,7 +1739,8 @@ void CArcCmdLineParser::Parse2(CArcCmdLineOptions &options)
         eo.OutDirMode =
           (index == 0) ? NExtractOutDirMode::k_Direct :
           (index == 1) ? NExtractOutDirMode::k_AddArcName :
-                         NExtractOutDirMode::k_ReplaceAsterisk;
+          (index == 2) ? NExtractOutDirMode::k_ReplaceAsterisk :
+                         NExtractOutDirMode::k_Smart;
       }
 
       eo.OverwriteMode = NExtract::NOverwriteMode::kAsk;

@@ -273,6 +273,7 @@ static const CContextMenuCommand g_Commands[] =
   CMD_REC( kOpen,        "Open",        IDS_CONTEXT_OPEN),
   CMD_REC( kExtract,     "Extract",     IDS_CONTEXT_EXTRACT),
   CMD_REC( kExtractHere, "ExtractHere", IDS_CONTEXT_EXTRACT_HERE),
+  CMD_REC( kExtractHereSmart, "ExtractHereSmart", IDS_CONTEXT_EXTRACT_HERE_SMART),
   CMD_REC( kExtractTo,   "ExtractTo",   IDS_CONTEXT_EXTRACT_TO),
   CMD_REC( kTest,        "Test",        IDS_CONTEXT_TEST),
   CMD_REC( kCompress,           "Compress",           IDS_CONTEXT_COMPRESS),
@@ -329,7 +330,10 @@ void CZipContextMenu::FillCommand(enum_CommandInternalID id, UString &mainString
   cmi.Verb = kMainVerb;
   cmi.Verb += command.Verb;
   // cmi.HelpString = cmi.Verb;
-  LangString(command.ResourceID, mainString);
+  if (id == kExtractHereSmart)
+    mainString = LangString_SmartExtract();
+  else
+    LangString(command.ResourceID, mainString);
   cmi.UserString = mainString;
 }
 
@@ -791,7 +795,7 @@ Z7_COMWF_B CZipContextMenu::QueryContextMenu(HMENU hMenu, UINT indexMenu,
 
   ODS("### 150")
 
-  if (_fileNames.Size() > 0 && currentCommandID + 10 <= commandIDLast)
+  if (_fileNames.Size() > 0 && currentCommandID + 11 <= commandIDLast)
   {
     ODS("### needExtract list START")
     const bool needExtendedVerbs = ((flags & Z7_WIN_CMF_EXTENDEDVERBS) != 0);
@@ -851,6 +855,15 @@ Z7_COMWF_B CZipContextMenu::QueryContextMenu(HMENU hMenu, UINT indexMenu,
           CCommandMapItem cmi;
           cmi.Folder = baseFolder;
           AddCommand(kExtractHere, mainString, cmi);
+          MyInsertMenu(popupMenu, subIndex++, currentCommandID++, mainString, bitmap);
+        }
+
+        if ((contextMenuFlags & NContextMenuFlags::kExtractHereSmart) != 0)
+        {
+          // Extract Here (Smart)
+          CCommandMapItem cmi;
+          cmi.Folder = baseFolder;
+          AddCommand(kExtractHereSmart, mainString, cmi);
           MyInsertMenu(popupMenu, subIndex++, currentCommandID++, mainString, bitmap);
         }
 
@@ -1289,6 +1302,16 @@ HRESULT CZipContextMenu::InvokeCommandCommon(const CCommandMapItem &cmi)
             );
         break;
       }
+      case kExtractHereSmart:
+      {
+        if (_attribs.FirstDirIndex != -1)
+        {
+          ShowErrorMessageRes(IDS_SELECT_FILES);
+          break;
+        }
+        ExtractArchives(_fileNames, cmi.Folder, false, false, _writeZone, true);
+        break;
+      }
       case kTest:
       {
         TestArchives(_fileNames);
@@ -1600,6 +1623,8 @@ void CZipExplorerCommand::LoadItems(IShellItemArray *psiItemArray)
       
     CZipContextMenu *shellExt = new CZipContextMenu();
     shellExt->IsRoot = false;
+    if (cmi.CommandInternalID == kExtractHereSmart)
+      shellExt->_writeZone = _writeZone;
 
     if (cmi.CtxCommandType == CtxCommandType_CrcRoot && !useCascadedCrc)
       shellExt->IsSeparator = true;

@@ -8,6 +8,8 @@
 #include "../../../Windows/Synchronization.h"
 #include "../../../Windows/Window.h"
 
+#include "../Explorer/resource.h"
+
 #include "LangUtils.h"
 #include "RegistryUtils.h"
 
@@ -33,6 +35,19 @@ bool LangOpen(CLang &lang, CFSTR fileName)
 FString GetLangDirPrefix()
 {
   return NDLL::GetModuleDirPrefix() + FTEXT("Lang") FSTRING_PATH_SEPARATOR;
+}
+
+UString LangString_SmartExtract()
+{
+  #ifdef Z7_LANG
+  const wchar_t *s = g_Lang.Get(IDS_CONTEXT_EXTRACT_HERE_SMART);
+  if (s)
+    return s;
+  if (g_LangID.IsEqualTo_Ascii_NoCase("zh-cn")
+      || g_LangID.IsEqualTo_Ascii_NoCase("zh"))
+    return L"\u667a\u80fd\u89e3\u538b\u81f3\u6b64";
+  #endif
+  return MyLoadString(IDS_CONTEXT_EXTRACT_HERE_SMART);
 }
 
 #ifdef Z7_LANG

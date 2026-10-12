@@ -19,7 +19,8 @@ enum EEnum
 {
   k_Direct = 0,
   k_AddArcName,
-  k_ReplaceAsterisk
+  k_ReplaceAsterisk,
+  k_Smart
 };
 }
 
